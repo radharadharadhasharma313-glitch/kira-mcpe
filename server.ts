@@ -18,7 +18,8 @@ try {
 }
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+// Control panel is always pinned to 3000 so it never conflicts with noVNC 6080
+const PORT = 3000;
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));

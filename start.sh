@@ -1,55 +1,63 @@
 #!/usr/bin/env bash
 
 echo "=========================================================="
-echo "🚀 Starting Bedrock Server Panel + Ubuntu XFCE4 GUI + Playit (Ultra-Lightweight)"
+echo "🚀 Starting Bedrock Server Panel + Ubuntu XFCE4 GUI + Playit"
 echo "=========================================================="
 
-# Export critical environment variables for TigerVNC and Node Production
+# Export critical environment variables
 export NODE_ENV=production
 export USER=root
 export HOME=/root
-export DISPLAY="${DISPLAY:-:1}"
-export PORT="${PORT:-3000}"
-export NOVNC_PORT="${NOVNC_PORT:-6080}"
+export DISPLAY=:1
+export PORT=3000
+export NOVNC_PORT=6080
 
 mkdir -p /minecraft-bedrock/worlds /minecraft-bedrock/backups /root/.config/playit /app/data /tmp/.X11-unix /root/.vnc
 chmod 1777 /tmp/.X11-unix
 touch /root/.Xauthority
 
-# Setup Lightweight VNC xstartup for XFCE4 Desktop (compositing disabled to save RAM)
+# Clean up any leftover X11 or VNC locks from previous runs
+echo "[GUI] Cleaning up stale locks..."
+vncserver -kill :1 >/dev/null 2>&1 || true
+rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1 /tmp/.X11-unix/X11
+
+# 1. Setup VNC xstartup to directly launch XFCE4 Desktop
 cat << 'EOF' > /root/.vnc/xstartup
 #!/bin/sh
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
-[ -x /etc/vnc/xstartup ] && exec /etc/vnc/xstartup
-[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
-xsetroot -solid grey
-xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || true
-vncconfig -iconic &
-startxfce4 &
+exec startxfce4
 EOF
 chmod +x /root/.vnc/xstartup
 
-# 1. Start TigerVNC Server (1024x768, 16-bit depth saves 60% RAM vs 24/32-bit)
-echo "[GUI] Starting TigerVNC server on ${DISPLAY} (1024x768, depth 16)..."
-vncserver -kill "${DISPLAY}" >/dev/null 2>&1 || true
-vncserver "${DISPLAY}" -localhost no -SecurityTypes None -geometry 1024x768 -depth 16 --I-KNOW-THIS-IS-INSECURE || echo "[WARN] TigerVNC started"
+# 2. Start TigerVNC Server on Display :1 (Port 5901)
+echo "[GUI] Starting TigerVNC server on :1 (Port 5901)..."
+vncserver :1 -localhost no -SecurityTypes None -geometry 1024x768 -depth 16 --I-KNOW-THIS-IS-INSECURE || echo "[WARN] TigerVNC started"
 
-# 2. Generate SSL certificate for websockify HTTPS support (takahashi-akari template)
-if [ ! -f /self.pem ]; then
-  echo "[GUI] Generating SSL certificate for noVNC websockify..."
-  openssl req -new -subj "/C=US/ST=State/L=City/O=Bedrock/CN=localhost" -x509 -days 365 -nodes -out /self.pem -keyout /self.pem >/dev/null 2>&1 || true
-fi
+# 3. Setup autoconnect redirect in noVNC web directory
+mkdir -p /usr/share/novnc
+cat << 'EOF' > /usr/share/novnc/index.html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale">
+  <title>Ubuntu Desktop GUI</title>
+</head>
+<body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;">
+  <h2>Connecting to Ubuntu XFCE4 Desktop...</h2>
+  <p><a href="vnc.html?autoconnect=true&resize=scale" style="color:#38bdf8;">Click here if not redirected automatically</a></p>
+</body>
+</html>
+EOF
 
-# 3. Start noVNC Websockify Bridge (Port 6080)
-echo "[GUI] Starting noVNC on port ${NOVNC_PORT}..."
-if [ -f /self.pem ]; then
-  websockify -D --web=/usr/share/novnc/ --cert=/self.pem "${NOVNC_PORT}" localhost:5901 || websockify -D --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5901 || true
-else
-  websockify -D --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5901 || true
-fi
+# 4. Start noVNC Websockify Bridge (Port 6080 -> 5901)
+# Note: In Railway, Railway provides the public SSL certificate on the domain.
+# Websockify listens on plain HTTP/WS so Railway edge proxy connects directly without TLS handshake conflicts!
+echo "[GUI] Starting noVNC websockify bridge on port ${NOVNC_PORT}..."
+pkill -f websockify 2>/dev/null || true
+websockify -D --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5901
 
-# 4. Initialize Playit.gg tunnel agent in background
+# 5. Initialize Playit.gg tunnel agent in background
 echo "[TUNNEL] Initializing Playit.gg CLI..."
 if [ ! -f /root/.config/playit/playit.toml ]; then
   echo "[TUNNEL] Starting playit agent to generate claim token..."
@@ -59,7 +67,7 @@ else
   playit --secret_path /root/.config/playit/playit.toml >> /app/data/playit.log 2>&1 &
 fi
 
-# 5. Tune Bedrock server.properties to lightweight profile (prevents Railway OOM)
+# 6. Tune Bedrock server.properties to lightweight profile (prevents Railway OOM)
 if [ -f /minecraft-bedrock/server.properties ]; then
   sed -i 's/view-distance=.*/view-distance=10/' /minecraft-bedrock/server.properties
   sed -i 's/max-threads=.*/max-threads=2/' /minecraft-bedrock/server.properties
@@ -67,7 +75,7 @@ if [ -f /minecraft-bedrock/server.properties ]; then
   sed -i 's/player-idle-timeout=.*/player-idle-timeout=15/' /minecraft-bedrock/server.properties
 fi
 
-# 6. Ensure Bedrock Linux binary is downloaded if missing
+# 7. Ensure Bedrock Linux binary is downloaded if missing
 if [ ! -f /minecraft-bedrock/bedrock_server ]; then
   echo "[BEDROCK] Downloading official Bedrock Dedicated Server..."
   cd /minecraft-bedrock
@@ -79,8 +87,8 @@ if [ ! -f /minecraft-bedrock/bedrock_server ]; then
   fi
 fi
 
-# 7. Start Web Control Panel (Capped at 128MB RAM to stay well under Railway 512MB limit)
-echo "[PANEL] Starting Bedrock Web Control Panel on port ${PORT}..."
+# 8. Start Web Control Panel on Port 3000
+echo "[PANEL] Starting Bedrock Web Control Panel on port 3000..."
 cd /app
 
 if [ ! -f dist/server.cjs ]; then
@@ -88,5 +96,5 @@ if [ ! -f dist/server.cjs ]; then
   npm run build || true
 fi
 
-echo "[PANEL] Launching Node.js Express server with 128MB RAM limit on port ${PORT}..."
+echo "[PANEL] Launching Node.js Express server on port 3000..."
 exec node --max-old-space-size=128 dist/server.cjs
