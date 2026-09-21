@@ -7,9 +7,8 @@ FROM --platform=linux/amd64 ubuntu:22.04
 LABEL maintainer="Bedrock Server Panel"
 LABEL description="Ubuntu Desktop GUI (XFCE4 + noVNC), Minecraft Bedrock Dedicated Server, Playit.gg, and Mobile Web Panel"
 
-# Prevent interactive prompts during installation & setup environment
+# Prevent interactive prompts during installation & setup base environment
 ENV DEBIAN_FRONTEND=noninteractive \
-    NODE_ENV=production \
     TZ=Etc/UTC \
     USER=root \
     HOME=/root \
@@ -78,13 +77,16 @@ RUN (curl -H "User-Agent: Mozilla/5.0" -fsSL https://www.minecraft.net/bedrockde
 # Create lightweight Bedrock server.properties (optimized for Railway 512MB RAM)
 RUN printf "server-name=My Bedrock Server\ngamemode=survival\ndifficulty=normal\nallow-cheats=true\nmax-players=8\nonline-mode=false\nwhite-list=false\nserver-port=19132\nserver-portv6=19133\nview-distance=10\ntick-distance=4\nplayer-idle-timeout=15\nmax-threads=2\nlevel-name=BedrockLevel\nlevel-seed=\ndefault-player-permission-level=member\ntexturepack-required=false\ncontent-log-file-enabled=true\nserver-authoritative-movement=server-auth\nplayer-movement-score-threshold=20\nserver-authoritative-block-breaking=true\n" > /minecraft-bedrock/server.properties
 
-# 5. Build and Setup Web Control Panel
+# 5. Build and Setup Web Control Panel (with devDependencies for vite/esbuild)
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --legacy-peer-deps --no-audit
+RUN npm install --include=dev --legacy-peer-deps --no-audit
 
 COPY . .
 RUN npm run build
+
+# Set production environment for runtime
+ENV NODE_ENV=production
 
 # 6. Setup startup script
 COPY start.sh /start.sh
