@@ -1,0 +1,6 @@
+{
+  "name": "Bedrock Server Panel",
+  "description": "Aternos-style Minecraft PE/Bedrock server control panel with live logs, Playit.gg tunnel claim, world manager, and Railway Docker deployment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
