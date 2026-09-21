@@ -72,7 +72,7 @@ RUN printf "server-name=My Bedrock Server\ngamemode=survival\ndifficulty=normal\
 # 5. Build and Setup Web Control Panel (with fallback flags for clean build)
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --include=dev --prefer-offline --no-audit
+RUN npm install --legacy-peer-deps --no-audit
 
 COPY . .
 RUN npm run build
