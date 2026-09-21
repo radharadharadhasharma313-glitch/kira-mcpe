@@ -60,42 +60,14 @@ RUN curl -SsL -o /usr/local/bin/playit https://github.com/playit-cloud/playit-ag
 RUN mkdir -p /minecraft-bedrock /minecraft-bedrock/worlds /minecraft-bedrock/backups
 WORKDIR /minecraft-bedrock
 
-# Download official Bedrock Server for Linux (or fallback skeleton)
-RUN curl -H "User-Agent: Mozilla/5.0" -fsSL https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.21.51.02.zip -o bedrock.zip \
-    || curl -fsSL https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/bedrock-server-1.21.50.07.zip -o bedrock.zip || true \
-    && if [ -f bedrock.zip ]; then unzip -q bedrock.zip && rm bedrock.zip && chmod +x bedrock_server || true; fi
+# Download official Bedrock Server for Linux
+RUN (curl -H "User-Agent: Mozilla/5.0" -fsSL https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.21.51.02.zip -o bedrock.zip \
+    || curl -fsSL https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/bedrock-server-1.21.50.07.zip -o bedrock.zip \
+    || true) \
+    && if [ -f bedrock.zip ]; then unzip -q bedrock.zip && rm -f bedrock.zip && chmod +x bedrock_server || true; fi
 
-# Default server.properties for Bedrock
-RUN if [ ! -f server.properties ]; then cat << 'EOF' > server.properties
-server-name=My Bedrock World
-gamemode=survival
-difficulty=normal
-allow-cheats=false
-max-players=10
-online-mode=true
-white-list=false
-server-port=19132
-server-portv6=19133
-view-distance=32
-tick-distance=4
-player-idle-timeout=30
-max-threads=8
-level-name=BedrockLevel
-level-seed=
-default-player-permission-level=member
-texturepack-required=false
-content-log-file-enabled=true
-compression-threshold=1
-compression-algorithm=zlib
-server-authoritative-movement=server-auth
-player-movement-score-threshold=20
-player-movement-action-direction-threshold=0.85
-player-movement-distance-threshold=0.3
-player-movement-duration-threshold-in-ms=500
-correct-player-movement=false
-server-authoritative-block-breaking=true
-EOF
-fi
+# Create default server.properties safely
+RUN printf "server-name=My Bedrock Server\ngamemode=survival\ndifficulty=normal\nallow-cheats=true\nmax-players=10\nonline-mode=false\nwhite-list=false\nserver-port=19132\nserver-portv6=19133\nview-distance=32\ntick-distance=4\nplayer-idle-timeout=30\nmax-threads=8\nlevel-name=BedrockLevel\nlevel-seed=\ndefault-player-permission-level=member\ntexturepack-required=false\ncontent-log-file-enabled=true\nserver-authoritative-movement=server-auth\nplayer-movement-score-threshold=20\nserver-authoritative-block-breaking=true\n" > /minecraft-bedrock/server.properties
 
 # 5. Build and Setup Web Control Panel
 WORKDIR /app

@@ -40,6 +40,18 @@ else
   playit --secret_path /root/.config/playit/playit.toml >> /app/data/playit.log 2>&1 &
 fi
 
+# Ensure Bedrock Linux binary is downloaded if missing
+if [ ! -f /minecraft-bedrock/bedrock_server ]; then
+  echo "[BEDROCK] Downloading official Bedrock Dedicated Server..."
+  cd /minecraft-bedrock
+  curl -H "User-Agent: Mozilla/5.0" -fsSL https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.21.51.02.zip -o bedrock.zip \
+    || curl -fsSL https://raw.githubusercontent.com/TheRemote/MinecraftBedrockServer/master/bedrock-server-1.21.50.07.zip -o bedrock.zip \
+    || true
+  if [ -f bedrock.zip ]; then
+    unzip -q -o bedrock.zip && rm -f bedrock.zip && chmod +x bedrock_server || true
+  fi
+fi
+
 # 6. Start Web Control Panel (Aternos-style UI)
 echo "[PANEL] Starting Bedrock Web Control Panel on port ${PORT}..."
 cd /app
