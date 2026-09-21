@@ -4,10 +4,18 @@ import fs from 'fs';
 import os from 'os';
 import { spawn, exec, ChildProcess } from 'child_process';
 import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe environment-agnostic directory resolution (works in both ESM and CJS)
+let serverDir = process.cwd();
+try {
+  if (typeof __dirname !== 'undefined') {
+    serverDir = __dirname;
+  } else if (typeof import.meta !== 'undefined' && import.meta && import.meta.url) {
+    serverDir = path.dirname(fileURLToPath(import.meta.url));
+  }
+} catch (e) {
+  serverDir = process.cwd();
+}
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -35,15 +43,15 @@ if (!fs.existsSync(PROPERTIES_FILE)) {
 gamemode=survival
 difficulty=normal
 allow-cheats=true
-max-players=10
+max-players=8
 online-mode=false
 white-list=false
 server-port=19132
 server-portv6=19133
-view-distance=32
+view-distance=10
 tick-distance=4
-player-idle-timeout=30
-max-threads=8
+player-idle-timeout=15
+max-threads=2
 level-name=BedrockLevel
 level-seed=
 default-player-permission-level=member
@@ -918,25 +926,43 @@ app.post('/api/players/action', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// Vite Middleware / Static Serve
+// Production Static HTML Serve / Dev Vite Middleware
 // -------------------------------------------------------------
 async function start() {
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasBuild = fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (hasBuild || process.env.NODE_ENV === 'production') {
+    // Pure, ultra-fast static HTML/CSS/JS serving
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexFile = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexFile)) {
+        res.sendFile(indexFile);
+      } else {
+        res.status(404).send('Web Control Panel Build Not Found. Please run "npm run build".');
+      }
     });
+  } else {
+    // Dynamic import for Vite so production CJS bundle never fails
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } catch (err) {
+      console.warn('[Vite Warning] Could not start Vite dev server, serving static:', err);
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Bedrock Server Panel] Running on http://0.0.0.0:${PORT}`);
+    console.log(`[Bedrock Server Panel] Running cleanly on http://0.0.0.0:${PORT}`);
   });
 }
 

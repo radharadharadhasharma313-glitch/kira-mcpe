@@ -9,6 +9,7 @@ LABEL description="Ubuntu Desktop GUI (XFCE4 + noVNC), Minecraft Bedrock Dedicat
 
 # Prevent interactive prompts during installation & setup environment
 ENV DEBIAN_FRONTEND=noninteractive \
+    NODE_ENV=production \
     TZ=Etc/UTC \
     USER=root \
     HOME=/root \
@@ -43,7 +44,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     x11-utils \
     x11-xserver-utils \
     xfce4 \
-    xfce4-goodies \
     xfce4-terminal \
     tigervnc-standalone-server \
     novnc \
@@ -75,8 +75,8 @@ RUN (curl -H "User-Agent: Mozilla/5.0" -fsSL https://www.minecraft.net/bedrockde
     || true) \
     && if [ -f bedrock.zip ]; then unzip -q bedrock.zip && rm -f bedrock.zip && chmod +x bedrock_server || true; fi
 
-# Create standard Bedrock server.properties
-RUN printf "server-name=My Bedrock Server\ngamemode=survival\ndifficulty=normal\nallow-cheats=true\nmax-players=10\nonline-mode=false\nwhite-list=false\nserver-port=19132\nserver-portv6=19133\nview-distance=32\ntick-distance=4\nplayer-idle-timeout=30\nmax-threads=8\nlevel-name=BedrockLevel\nlevel-seed=\ndefault-player-permission-level=member\ntexturepack-required=false\ncontent-log-file-enabled=true\nserver-authoritative-movement=server-auth\nplayer-movement-score-threshold=20\nserver-authoritative-block-breaking=true\n" > /minecraft-bedrock/server.properties
+# Create lightweight Bedrock server.properties (optimized for Railway 512MB RAM)
+RUN printf "server-name=My Bedrock Server\ngamemode=survival\ndifficulty=normal\nallow-cheats=true\nmax-players=8\nonline-mode=false\nwhite-list=false\nserver-port=19132\nserver-portv6=19133\nview-distance=10\ntick-distance=4\nplayer-idle-timeout=15\nmax-threads=2\nlevel-name=BedrockLevel\nlevel-seed=\ndefault-player-permission-level=member\ntexturepack-required=false\ncontent-log-file-enabled=true\nserver-authoritative-movement=server-auth\nplayer-movement-score-threshold=20\nserver-authoritative-block-breaking=true\n" > /minecraft-bedrock/server.properties
 
 # 5. Build and Setup Web Control Panel
 WORKDIR /app
