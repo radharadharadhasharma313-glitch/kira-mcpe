@@ -386,7 +386,12 @@ function stopBedrockServerProcess() {
 // API ROUTES
 // -------------------------------------------------------------
 
-// 1. Server Status
+// 1. Health Check for Railway & monitoring
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', port: PORT, uptime: process.uptime() });
+});
+
+// 2. Server Status
 app.get('/api/status', (req, res) => {
   const uptimeSeconds = state.startedAt ? Math.floor((Date.now() - state.startedAt) / 1000) : 0;
   

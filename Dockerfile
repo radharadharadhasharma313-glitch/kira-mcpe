@@ -7,9 +7,11 @@ FROM --platform=linux/amd64 ubuntu:22.04
 LABEL maintainer="Bedrock Server Panel"
 LABEL description="Ubuntu Desktop GUI (XFCE4 + noVNC), Minecraft Bedrock Dedicated Server, Playit.gg, and Mobile Web Panel"
 
-# Prevent interactive prompts during installation
+# Prevent interactive prompts during installation & setup environment
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC \
+    USER=root \
+    HOME=/root \
     DISPLAY=:1 \
     VNC_PORT=5901 \
     NOVNC_PORT=6080 \
@@ -19,7 +21,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 
-# 1. Install Base Packages, Desktop Environment (XFCE4), VNC & noVNC
+# 1. Install Base Packages, Desktop Environment (XFCE4), VNC, openssl & noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -32,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     procps \
     net-tools \
+    openssl \
     libssl3 \
     libcurl4 \
     libcap2-bin \
@@ -40,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     x11-utils \
     x11-xserver-utils \
     xfce4 \
+    xfce4-goodies \
     xfce4-terminal \
     tigervnc-standalone-server \
     novnc \
@@ -47,6 +51,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-numpy \
     && rm -rf /var/lib/apt/lists/*
+
+# Setup Xauthority & default index for noVNC
+RUN touch /root/.Xauthority && \
+    mkdir -p /root/.vnc /usr/share/novnc && \
+    ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html || true
 
 # 2. Install Node.js 20 LTS for the Web Control Panel
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -69,7 +78,7 @@ RUN (curl -H "User-Agent: Mozilla/5.0" -fsSL https://www.minecraft.net/bedrockde
 # Create standard Bedrock server.properties
 RUN printf "server-name=My Bedrock Server\ngamemode=survival\ndifficulty=normal\nallow-cheats=true\nmax-players=10\nonline-mode=false\nwhite-list=false\nserver-port=19132\nserver-portv6=19133\nview-distance=32\ntick-distance=4\nplayer-idle-timeout=30\nmax-threads=8\nlevel-name=BedrockLevel\nlevel-seed=\ndefault-player-permission-level=member\ntexturepack-required=false\ncontent-log-file-enabled=true\nserver-authoritative-movement=server-auth\nplayer-movement-score-threshold=20\nserver-authoritative-block-breaking=true\n" > /minecraft-bedrock/server.properties
 
-# 5. Build and Setup Web Control Panel (with fallback flags for clean build)
+# 5. Build and Setup Web Control Panel
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps --no-audit

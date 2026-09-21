@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-set -e
 
 echo "=========================================================="
 echo "🚀 Starting Bedrock Server Panel + Ubuntu XFCE4 GUI + Playit"
 echo "=========================================================="
 
-PORT="${PORT:-3000}"
-NOVNC_PORT="${NOVNC_PORT:-6080}"
-DISPLAY="${DISPLAY:-:1}"
+# Export critical environment variables for TigerVNC
+export USER=root
+export HOME=/root
+export DISPLAY="${DISPLAY:-:1}"
+export PORT="${PORT:-3000}"
+export NOVNC_PORT="${NOVNC_PORT:-6080}"
 
 mkdir -p /minecraft-bedrock/worlds /minecraft-bedrock/backups /root/.config/playit /app/data /tmp/.X11-unix /root/.vnc
 chmod 1777 /tmp/.X11-unix
+touch /root/.Xauthority
 
-# Setup VNC passwordless xstartup for XFCE4 Desktop
+# Setup VNC xstartup for XFCE4 Desktop
 cat << 'EOF' > /root/.vnc/xstartup
 #!/bin/sh
 unset SESSION_MANAGER
@@ -27,24 +30,34 @@ chmod +x /root/.vnc/xstartup
 
 # 1. Start TigerVNC Server (Port 5901)
 echo "[GUI] Starting TigerVNC server on ${DISPLAY} (Port 5901)..."
-vncserver -kill "${DISPLAY}" 2>/dev/null || true
-vncserver "${DISPLAY}" -localhost no -SecurityTypes None -geometry 1280x720 --I-KNOW-THIS-IS-INSECURE || true
+vncserver -kill "${DISPLAY}" >/dev/null 2>&1 || true
+vncserver "${DISPLAY}" -localhost no -SecurityTypes None -geometry 1280x720 --I-KNOW-THIS-IS-INSECURE || echo "[WARN] TigerVNC started with warnings"
 
-# 2. Start noVNC Websockify Bridge (Port 6080)
+# 2. Generate SSL certificate for websockify HTTPS support (from takahashi-akari template)
+if [ ! -f /self.pem ]; then
+  echo "[GUI] Generating SSL certificate for noVNC websockify..."
+  openssl req -new -subj "/C=US/ST=State/L=City/O=Bedrock/CN=localhost" -x509 -days 365 -nodes -out /self.pem -keyout /self.pem >/dev/null 2>&1 || true
+fi
+
+# 3. Start noVNC Websockify Bridge (Port 6080)
 echo "[GUI] Starting noVNC on port ${NOVNC_PORT}..."
-websockify -D --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5901 || websockify --web /usr/share/novnc "${NOVNC_PORT}" localhost:5901 &
+if [ -f /self.pem ]; then
+  websockify -D --web=/usr/share/novnc/ --cert=/self.pem "${NOVNC_PORT}" localhost:5901 || websockify -D --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5901 || true
+else
+  websockify -D --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5901 || true
+fi
 
-# 3. Initialize Playit.gg tunnel agent
+# 4. Initialize Playit.gg tunnel agent in background
 echo "[TUNNEL] Initializing Playit.gg CLI..."
 if [ ! -f /root/.config/playit/playit.toml ]; then
-  echo "[TUNNEL] First time setup: starting playit agent to generate claim token..."
+  echo "[TUNNEL] Starting playit agent to generate claim token..."
   playit --secret_path /root/.config/playit/playit.toml > /app/data/playit.log 2>&1 &
 else
   echo "[TUNNEL] Existing playit configuration found. Connecting..."
   playit --secret_path /root/.config/playit/playit.toml >> /app/data/playit.log 2>&1 &
 fi
 
-# 4. Ensure Bedrock Linux binary is downloaded if missing
+# 5. Ensure Bedrock Linux binary is downloaded if missing
 if [ ! -f /minecraft-bedrock/bedrock_server ]; then
   echo "[BEDROCK] Downloading official Bedrock Dedicated Server..."
   cd /minecraft-bedrock
@@ -56,13 +69,14 @@ if [ ! -f /minecraft-bedrock/bedrock_server ]; then
   fi
 fi
 
-# 5. Start Web Control Panel (UPI-style UI)
+# 6. Start Web Control Panel (UPI-style UI)
 echo "[PANEL] Starting Bedrock Web Control Panel on port ${PORT}..."
 cd /app
 
 if [ ! -f dist/server.cjs ]; then
   echo "[PANEL] Compiling panel server..."
-  npm run build
+  npm run build || true
 fi
 
+echo "[PANEL] Launching Node.js Express server on port ${PORT}..."
 exec node dist/server.cjs
