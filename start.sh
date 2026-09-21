@@ -2,35 +2,39 @@
 set -e
 
 echo "=========================================================="
-echo "🚀 Starting Bedrock Server Panel + Ubuntu GUI + Playit.gg"
+echo "🚀 Starting Bedrock Server Panel + Ubuntu XFCE4 GUI + Playit"
 echo "=========================================================="
 
 PORT="${PORT:-3000}"
 NOVNC_PORT="${NOVNC_PORT:-6080}"
 DISPLAY="${DISPLAY:-:1}"
 
-mkdir -p /minecraft-bedrock/worlds /minecraft-bedrock/backups /root/.config/playit /app/data /tmp/.X11-unix
+mkdir -p /minecraft-bedrock/worlds /minecraft-bedrock/backups /root/.config/playit /app/data /tmp/.X11-unix /root/.vnc
 chmod 1777 /tmp/.X11-unix
 
-# 1. Start Xvfb Virtual Framebuffer
-echo "[GUI] Starting Xvfb on display ${DISPLAY}..."
-Xvfb "${DISPLAY}" -screen 0 1280x720x16 &
-sleep 1
+# Setup VNC passwordless xstartup for XFCE4 Desktop
+cat << 'EOF' > /root/.vnc/xstartup
+#!/bin/sh
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+[ -x /etc/vnc/xstartup ] && exec /etc/vnc/xstartup
+[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
+xsetroot -solid grey
+vncconfig -iconic &
+startxfce4 &
+EOF
+chmod +x /root/.vnc/xstartup
 
-# 2. Start Openbox Window Manager & Tint2 Panel
-echo "[GUI] Starting Openbox Window Manager & Tint2..."
-openbox --display "${DISPLAY}" &
-tint2 -c /dev/null &
+# 1. Start TigerVNC Server (Port 5901)
+echo "[GUI] Starting TigerVNC server on ${DISPLAY} (Port 5901)..."
+vncserver -kill "${DISPLAY}" 2>/dev/null || true
+vncserver "${DISPLAY}" -localhost no -SecurityTypes None -geometry 1280x720 --I-KNOW-THIS-IS-INSECURE || true
 
-# 3. Start x11vnc Server
-echo "[GUI] Starting x11vnc..."
-x11vnc -display "${DISPLAY}" -forever -shared -nopw -rfbport 5901 -bg -o /var/log/x11vnc.log || true
-
-# 4. Start noVNC (Websocket to VNC Bridge)
+# 2. Start noVNC Websockify Bridge (Port 6080)
 echo "[GUI] Starting noVNC on port ${NOVNC_PORT}..."
-websockify --web /usr/share/novnc "${NOVNC_PORT}" localhost:5901 &
+websockify -D --web=/usr/share/novnc/ "${NOVNC_PORT}" localhost:5901 || websockify --web /usr/share/novnc "${NOVNC_PORT}" localhost:5901 &
 
-# 5. Initialize Playit.gg tunnel agent
+# 3. Initialize Playit.gg tunnel agent
 echo "[TUNNEL] Initializing Playit.gg CLI..."
 if [ ! -f /root/.config/playit/playit.toml ]; then
   echo "[TUNNEL] First time setup: starting playit agent to generate claim token..."
@@ -40,7 +44,7 @@ else
   playit --secret_path /root/.config/playit/playit.toml >> /app/data/playit.log 2>&1 &
 fi
 
-# Ensure Bedrock Linux binary is downloaded if missing
+# 4. Ensure Bedrock Linux binary is downloaded if missing
 if [ ! -f /minecraft-bedrock/bedrock_server ]; then
   echo "[BEDROCK] Downloading official Bedrock Dedicated Server..."
   cd /minecraft-bedrock
@@ -52,14 +56,13 @@ if [ ! -f /minecraft-bedrock/bedrock_server ]; then
   fi
 fi
 
-# 6. Start Web Control Panel (Aternos-style UI)
+# 5. Start Web Control Panel (UPI-style UI)
 echo "[PANEL] Starting Bedrock Web Control Panel on port ${PORT}..."
 cd /app
 
-# Ensure dependencies built
 if [ ! -f dist/server.cjs ]; then
   echo "[PANEL] Compiling panel server..."
   npm run build
 fi
 
-node dist/server.cjs
+exec node dist/server.cjs
